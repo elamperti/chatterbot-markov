@@ -4,11 +4,11 @@ from chatterbot.logic.best_match import BestMatch
 
 import markovify
 import os
-
+import re
 
 class MarkovAdapter(BestMatch):
-    def __init__(self, **kwargs):
-        super(MarkovAdapter, self).__init__(**kwargs)
+    def __init__(self, chatbot, **kwargs):
+        super().__init__(chatbot, **kwargs)
 
         self.confidence_threshold = kwargs.get('threshold', 0.6)
         self.default_response = kwargs.get(
@@ -16,44 +16,60 @@ class MarkovAdapter(BestMatch):
             "I'm learning..."
         )
 
-    def process(self, input_statement):
+    def process(self, input_statement, additional_response_selection_parameters):
         """
         Return a default response with a high confidence if
         a high confidence response is not known.
         """
         # Select the closest match to the input statement
-        confidence, closest_match = self.get(input_statement)
+        search_results = self.search_algorithm.search(input_statement)
+        closest_match = next(search_results, input_statement)
 
-        self.add_to_brain(input_statement.text)
+        # self.add_to_brain(closest_match)
         self.text_model = self.load_brain()
         # Confidence should be high only if it is less than the threshold
-        if confidence < self.confidence_threshold:
-            confidence = 1
-        else:
-            confidence = 0
+        # if confidence < self.confidence_threshold:
+        #     confidence = 1
+        # else:
+        #     confidence = 0
 
-        if confidence:
-            output = self.generate_sentence()
-        else:
-            output = None
+        # if confidence:
+        #     output = self.generate_sentence()
+        # else:
+        #     output = None
 
-        if output is None:
-            output = self.default_response
+        # if output is None:
+        #     output = self.default_response
 
-        return confidence, Statement(output)
+        print ("INPUT STATEMENT:", closest_match)
+        print ("CLOSEST MATCH:", closest_match)
+        closest_match = re.sub(r'[^a-zA-Z0-9áéíóúÁÉÍÓÚçÇñÑÀà]', " ", str(closest_match))
+        print ("WILL REPLY:", " ".join(str(closest_match).split(" ")[:2]))
+        # ToDo: Figure out this shit and pray to god no one sees this horrible code
+        try:
+            output = self.generate_sentence(str(" ".join(str(closest_match).split(" ")[:2])))
+        except:
+            output = self.generate_sentence(str(" ".join(str(closest_match).split(" ")[:1])))
+        # output.confidence = 1
 
+        return Statement(output)
 
     def add_to_brain(self, msg):
-        f = open('training_text.txt', 'a')
+        f = open('markovified.txt', 'a')
         f.write(str(msg) + '\n')
         f.close()
 
-    def generate_sentence(self):
-        return self.text_model.make_short_sentence(300)
+    def generate_sentence(self, from_text):
+        print("GENERATING FROM:", from_text)
+        # try:
+        return self.text_model.make_sentence_with_start(beginning=from_text)
+        # except:
+        #     print('EXCEPT')
+        #     return self.text_model.make_short_sentence(120)
+
 
     def load_brain(self):
-        if os.path.exists('training_text.txt'):
-            with open("training_text.txt") as f:
-                text = f.read()
-            f.close()
-            return markovify.NewlineText(text)
+        with open("markovified.txt") as f:
+            text = f.read()
+        f.close()
+        return markovify.NewlineText(text)
